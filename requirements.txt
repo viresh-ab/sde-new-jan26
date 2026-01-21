@@ -1,0 +1,6 @@
+streamlit
+pandas
+numpy
+openai>=1.0.0
+sdv>=1.10
+python-dotenv
