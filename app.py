@@ -1,0 +1,111 @@
+import streamlit as st
+import pandas as pd
+
+from schema_extractor import extract_schema
+from qa_llm_generator import generate_qa_synthetic_data
+from sdv_scaler import scale_structured_data
+from hybrid_merger import merge_hybrid
+from validator import validate_schema
+
+
+# ----------------------------------------------------
+# Page configuration
+# ----------------------------------------------------
+st.set_page_config(
+    page_title="Markelytics AI | Synthetic Hybrid Studio",
+    layout="wide"
+)
+
+# ----------------------------------------------------
+# Hide Streamlit UI
+# ----------------------------------------------------
+st.markdown(
+    """
+    <style>
+    header[data-testid="stHeader"],
+    div[data-testid="stToolbar"],
+    div[data-testid="stViewerBadge"],
+    div[data-testid="stStatusWidget"] {
+        display: none !important;
+    }
+    .block-container {
+        padding-top: 1rem !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+st.title("🧠 Markelytics AI | Synthetic Hybrid Studio")
+st.caption("ChatGPT (text) + SDV (structured) synthetic data generation")
+
+# ----------------------------------------------------
+# Helpers
+# ----------------------------------------------------
+def split_columns(df):
+    text_cols, structured_cols = [], []
+    for col in df.columns:
+        avg_len = df[col].astype(str).str.len().mean()
+        if avg_len > 40:
+            text_cols.append(col)
+        else:
+            structured_cols.append(col)
+    return text_cols, structured_cols
+
+
+# ----------------------------------------------------
+# Upload CSV
+# ----------------------------------------------------
+uploaded_file = st.file_uploader("Upload Survey CSV", type=["csv"])
+
+if uploaded_file:
+    real_df = pd.read_csv(uploaded_file)
+    st.success("CSV uploaded successfully")
+    st.dataframe(real_df.head())
+
+    final_rows = st.number_input(
+        "Number of synthetic rows",
+        min_value=50,
+        max_value=10000,
+        value=1000,
+        step=50
+    )
+
+    if st.button("🚀 Generate Hybrid Synthetic Data"):
+        with st.spinner("Generating hybrid synthetic data..."):
+            try:
+                schema = extract_schema(real_df)
+
+                text_cols, structured_cols = split_columns(real_df)
+
+                text_real = real_df[text_cols]
+                structured_real = real_df[structured_cols]
+
+                # Generate synthetic parts
+                text_syn = generate_qa_synthetic_data(
+                    sample_df=text_real,
+                    rows=final_rows
+                )
+
+                structured_syn = scale_structured_data(
+                    structured_real,
+                    rows=final_rows
+                )
+
+                # Merge and validate
+                final_df = merge_hybrid(structured_syn, text_syn)
+                final_df = validate_schema(real_df, final_df)
+
+                st.success(f"Synthetic dataset generated ({len(final_df)} rows)")
+                st.dataframe(final_df.head())
+
+                st.download_button(
+                    "⬇ Download Synthetic CSV",
+                    final_df.to_csv(index=False),
+                    "synthetic_hybrid_data.csv",
+                    "text/csv"
+                )
+
+            except Exception as e:
+                st.error("Failed to generate synthetic data")
+                st.code(str(e))
