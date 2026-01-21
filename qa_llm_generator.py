@@ -27,10 +27,12 @@ def _generate_batch(sample_df, rows):
     prompt = f"""
 Generate synthetic survey answers.
 
-RULES:
+STRICT RULES:
 - Output CSV ONLY
-- Every value must be in double quotes
-- Header EXACTLY:
+- Every value must be wrapped in double quotes
+- If a value contains a double quote, escape it as two double quotes ("")
+- NEVER use unescaped "
+- Header must be EXACTLY:
 {columns}
 - Generate EXACTLY {rows} rows
 - Natural language, diverse answers
@@ -46,12 +48,25 @@ Style reference:
         temperature=0.85,
     )
 
-    raw = re.sub(r"```.*?```", "", response.choices[0].message.content, flags=re.DOTALL)
+    raw = response.choices[0].message.content
 
-    df = pd.read_csv(
-        StringIO(raw),
-        quotechar='"',
-        engine="python"
-    )
+    # Remove markdown if present
+    raw = re.sub(r"```.*?```", "", raw, flags=re.DOTALL).strip()
+
+    # 🔒 SAFETY FIX: normalize broken quotes
+    raw = raw.replace('"""""', '""')  # over-escaped
+    raw = raw.replace('"""', '""')
+
+    try:
+        df = pd.read_csv(
+            StringIO(raw),
+            quotechar='"',
+            escapechar='"',
+            engine="python"
+        )
+    except Exception as e:
+        raise ValueError(
+            f"CSV parsing failed.\n\nRAW OUTPUT:\n{raw}"
+        ) from e
 
     return df[columns]
