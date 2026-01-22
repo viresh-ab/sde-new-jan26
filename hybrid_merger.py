@@ -1,33 +1,29 @@
 import pandas as pd
 
 
-def validate_schema(real_df, synthetic_df):
+def merge_hybrid(structured_df, text_df):
     """
-    Schema-safe validation:
-    - Aligns columns
-    - Preserves data even if some rows are invalid
-    - Never returns empty unless input is empty
+    Safe hybrid merge:
+    - If one side is empty or None, return the other
+    - Never return empty unless both are empty
     """
 
-    if synthetic_df is None or synthetic_df.empty:
-        raise ValueError("Synthetic data is empty before validation")
+    if structured_df is None or structured_df.empty:
+        if text_df is None or text_df.empty:
+            raise ValueError("Both structured and text data are empty")
+        return text_df.reset_index(drop=True)
 
-    validated = synthetic_df.copy()
+    if text_df is None or text_df.empty:
+        return structured_df.reset_index(drop=True)
 
-    # Keep only known columns
-    validated = validated[[c for c in validated.columns if c in real_df.columns]]
+    min_len = min(len(structured_df), len(text_df))
 
-    # Reorder columns to match real data
-    validated = validated.reindex(columns=real_df.columns, fill_value=None)
+    structured_df = structured_df.iloc[:min_len].reset_index(drop=True)
+    text_df = text_df.iloc[:min_len].reset_index(drop=True)
 
-    # Attempt type coercion (non-destructive)
-    for col in real_df.columns:
-        try:
-            validated[col] = validated[col].astype(real_df[col].dtype)
-        except Exception:
-            pass  # keep best-effort values
+    merged = pd.concat([structured_df, text_df], axis=1)
 
-    if validated.empty:
-        raise ValueError("Validation removed all rows")
+    if merged.empty:
+        raise ValueError("Hybrid merge resulted in empty DataFrame")
 
-    return validated
+    return merged
