@@ -53,6 +53,22 @@ def split_columns(df):
     return text_cols, structured_cols
 
 
+def ensure_df(obj, name):
+    if obj is None:
+        raise ValueError(f"{name} returned None")
+
+    if isinstance(obj, list):
+        obj = pd.DataFrame(obj)
+
+    if not isinstance(obj, pd.DataFrame):
+        raise TypeError(f"{name} must return a DataFrame, got {type(obj)}")
+
+    if obj.empty:
+        raise ValueError(f"{name} returned an empty DataFrame")
+
+    return obj
+
+
 # ----------------------------------------------------
 # Upload CSV
 # ----------------------------------------------------
@@ -81,20 +97,36 @@ if uploaded_file:
                 text_real = real_df[text_cols]
                 structured_real = real_df[structured_cols]
 
-                # Generate synthetic parts
-                text_syn = generate_qa_synthetic_data(
-                    sample_df=text_real,
-                    rows=final_rows
+                # ----------------------------
+                # Generate synthetic components
+                # ----------------------------
+                text_syn = None
+                structured_syn = None
+
+                if not text_real.empty:
+                    text_syn = ensure_df(
+                        generate_qa_synthetic_data(text_real, final_rows),
+                        "LLM generator"
+                    )
+
+                if not structured_real.empty:
+                    structured_syn = ensure_df(
+                        scale_structured_data(structured_real, final_rows),
+                        "SDV generator"
+                    )
+
+                # ----------------------------
+                # Merge + validate
+                # ----------------------------
+                final_df = ensure_df(
+                    merge_hybrid(structured_syn, text_syn, final_rows),
+                    "Hybrid merger"
                 )
 
-                structured_syn = scale_structured_data(
-                    structured_real,
-                    rows=final_rows
+                final_df = ensure_df(
+                    validate_schema(real_df, final_df),
+                    "Schema validator"
                 )
-
-                # Merge and validate
-                final_df = merge_hybrid(structured_syn, text_syn)
-                final_df = validate_schema(real_df, final_df)
 
                 st.success(f"Synthetic dataset generated ({len(final_df)} rows)")
                 st.dataframe(final_df.head())
