@@ -119,7 +119,7 @@ if uploaded_file:
                 # Merge + validate
                 # ----------------------------
                 final_df = ensure_df(
-                    merge_hybrid(structured_syn, text_syn, final_rows),
+                    merge_hybrid(structured_syn, text_syn),
                     "Hybrid merger"
                 )
 
